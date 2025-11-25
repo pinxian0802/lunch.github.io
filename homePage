@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <!-- 標題 -->
+   <title>午餐吃什麼(･ω´･ )</title>
+   <!-- 載入 Tailwind CSS -->
+   <script src="https://cdn.tailwindcss.com"></script>
+   <!-- 載入 Lucide Icons (用於圖示) -->
+   <script src="https://unpkg.com/lucide@latest"></script>
+   <style>
+       /* 數據雲風格：使用 Inter 或系統預設無襯線體，強調俐落感 */
+       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght400;500;700&display=swap');
+       body {
+           font-family: 'Inter', 'Noto Sans TC', sans-serif;
+           background-color: #f8fafc; /* 修正為柔和的淺灰色背景 (約等於 Tailwind slate-50) */
+       }
+       /* 標題字體調整：去除極端字距調整，保持清晰度 */
+       h1, h2 {
+            font-family: 'Noto Sans TC', sans-serif;
+       }
+       .filter-button {
+           transition: all 0.2s;
+           border: 1px solid #e2e8f0; /* Slate-200 */
+       }
+       .filter-button.active {
+           box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2), 0 2px 4px -2px rgba(37, 99, 235, 0.1);
+           transform: translateY(-1px);
+           border-color: #2563eb; /* Blue-600 */
+       }
+       /* 地圖容器樣式 - 確保在 spin-result 區塊有固定高度 */
+       .map-container {
+           width: 100%;
+           overflow: hidden;
+           border-radius: 0.5rem;
+           margin-top: 1rem;
+           border: 1px solid #cbd5e1;
+       }
+       /* 輪盤 Canvas 容器 */
+       #roulette-canvas {
+           box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+           transition: transform 0.1s;
+       }
+
+
+       /* 手機尺寸下的輪盤調整：讓輪盤小一點，讓出更多垂直空間 */
+       @media (max-width: 640px) {
+           #roulette-canvas {
+               width: 250px;
+               height: 250px;
+           }
+       }
+   </style>
+</head>
+<body class="p-3 sm:p-8 text-slate-800">
+
+
+   <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 md:p-10 border border-slate-200">
+       <!-- 標題：科技藍風格 -->
+       <h1 class="text-3xl sm:text-4xl font-extrabold text-slate-900 mb-2 pb-1 border-b-2 border-blue-500 inline-block">
+           午餐吃什麼(･ω´･ )
+       </h1>
+       <p class="text-xs sm:text-sm text-slate-500 mb-6 mt-2">
+           <span class="bg-slate-100 px-2 py-1 rounded text-xs font-mono text-slate-600">DATA_SOURCE</span> 雲端儲存 / 青島東路七號附近
+       </p>
+
+
+       <!-- 狀態顯示區 -->
+       <div id="status-message" class="mb-6 p-4 rounded-lg text-sm transition-all duration-300 border-l-4 shadow-sm bg-slate-50 border-slate-300">
+           <!-- 狀態訊息將在這裡顯示 -->
+       </div>
+      
+       <!-- 資料庫控制區塊 (新增) -->
+       <div class="space-y-4 mb-8 bg-indigo-50 p-5 rounded-xl border border-indigo-200">
+           <h2 class="text-lg font-bold text-indigo-700 uppercase tracking-wide flex items-center">
+               <i data-lucide="database" class="w-4 h-4 mr-2"></i> 雲端資料庫控制
+           </h2>
+           <div id="db-status" class="text-xs text-indigo-600 mb-3">
+               <!-- 顯示資料庫狀態和餐廳數量 -->
+           </div>
+           <div class="flex flex-wrap gap-3">
+                <button id="load-btn" onclick="loadRestaurantsFromFirestore()" class="flex-1 min-w-[120px] bg-indigo-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-600 transition disabled:opacity-50">
+                   <i data-lucide="cloud-download" class="w-4 h-4 mr-1 inline"></i> 載入清單
+               </button>
+               <button id="save-btn" onclick="saveRestaurantsToFirestore()" class="flex-1 min-w-[120px] bg-slate-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-slate-700 transition disabled:opacity-50">
+                   <i data-lucide="cloud-upload" class="w-4 h-4 mr-1 inline"></i> 儲存清單
+               </button>
+           </div>
+       </div>
+
+
+       <!-- 篩選器區塊 -->
+       <div class="space-y-6 mb-8 bg-slate-50 p-6 rounded-xl border border-slate-200">
+           <h2 class="text-lg font-bold text-slate-700 uppercase tracking-wide mb-4 flex items-center">
+               <i data-lucide="filter" class="w-4 h-4 mr-2"></i> 篩選參數設定
+           </h2>
+
+
+           <!-- 價格篩選器 -->
+           <div>
+               <label class="block text-slate-500 text-xs font-bold mb-2 uppercase">價格預算</label>
+               <div class="flex flex-wrap gap-3">
+                   <button data-price="" class="filter-button bg-white text-slate-600 py-2 px-4 rounded hover:bg-slate-100" onclick="selectFilter('price', '')">
+                       不限
+                   </button>
+                   <!-- $ (實惠) 改為 Sky 藍色系 -->
+                   <button data-price="$" class="filter-button bg-white text-sky-600 py-2 px-4 rounded hover:bg-sky-50" onclick="selectFilter('price', '$')">
+                       $ (實惠)
+                   </button>
+                   <button data-price="$$" class="filter-button bg-white text-blue-600 py-2 px-4 rounded hover:bg-blue-50" onclick="selectFilter('price', '$$')">
+                       $$ (中等)
+                   </button>
+                   <button data-price="$$$" class="filter-button bg-white text-purple-600 py-2 px-4 rounded hover:bg-purple-50" onclick="selectFilter('price', '$$$')">
+                       $$$ (高級)
+                   </button>
+               </div>
+           </div>
+
+
+           <!-- 距離篩選器 -->
+           <div class="mt-4">
+               <label class="block text-slate-500 text-xs font-bold mb-2 uppercase">距離半徑</label>
+               <div class="flex flex-wrap gap-3">
+                   <button data-distance="2000" class="filter-button bg-white text-slate-600 py-2 px-4 rounded hover:bg-slate-100" onclick="selectFilter('distance', 2000)">
+                       不限
+                   </button>
+                   <!-- 新增 100m 選項 -->
+                   <button data-distance="100" class="filter-button bg-white text-sky-600 py-2 px-4 rounded hover:bg-sky-50" onclick="selectFilter('distance', 100)">
+                       100m
+                   </button>
+                   <button data-distance="500" class="filter-button bg-white text-sky-600 py-2 px-4 rounded hover:bg-sky-50" onclick="selectFilter('distance', 500)">
+                       500m
+                   </button>
+                   <button data-distance="1000" class="filter-button bg-white text-sky-600 py-2 px-4 rounded hover:bg-sky-50" onclick="selectFilter('distance', 1000)">
+                       1km
+                   </button>
+                   <button data-distance="1500" class="filter-button bg-white text-sky-600 py-2 px-4 rounded hover:bg-sky-50" onclick="selectFilter('distance', 1500)">
+                       1.5km
+                   </button>
+               </div>
+           </div>
+       </div>
+      
+       <!-- 輪盤抽籤區塊 (改為淺色配色) -->
+       <div class="mt-8 bg-white p-6 rounded-xl shadow-xl border border-slate-200 text-slate-800 relative overflow-hidden">
+           <!-- 裝飾性背景元素 (淺色風格) -->
+           <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-blue-100 rounded-full opacity-50 blur-xl"></div>
+           <div class="absolute bottom-0 left-0 -mb-4 -ml-4 w-32 h-32 bg-indigo-100 rounded-full opacity-50 blur-xl"></div>
+
+
+           <h2 class="text-xl font-bold text-slate-700 mb-6 flex items-center justify-center border-b border-slate-200 pb-4">
+               <i data-lucide="compass" class="w-5 h-5 mr-2 text-blue-500"></i> 隨機決策引擎 (Randomizer)
+           </h2>
+           <div class="flex flex-col items-center space-y-6">
+               <!-- 輪盤背景改為淺色 -->
+               <canvas id="roulette-canvas" width="300" height="300" class="rounded-full shadow-2xl border-4 border-slate-300 bg-white"></canvas>
+              
+               <!-- 抽籤按鈕改為亮青色 (Cyan) 以突出顯示 -->
+               <button id="spin-btn" onclick="spinWheel()" class="bg-cyan-500 text-slate-900 font-bold py-3 px-10 rounded-full shadow-[0_0_15px_rgba(6,182,212,0.5)] hover:bg-cyan-400 hover:shadow-[0_0_25px_rgba(6,182,212,0.7)] transition duration-150 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center">
+                   <i data-lucide="play" class="w-4 h-4 mr-2 fill-current"></i> 啟動抽籤
+               </button>
+               <!-- 調整 spin-result 容器以顯示多行清晰結果 -->
+               <div id="spin-result" class="min-h-[6rem] flex flex-col items-center justify-center bg-slate-50 p-4 rounded-lg border border-cyan-300 w-full max-w-sm text-center shadow-inner">
+                   <!-- 抽籤結果顯示處 -->
+               </div>
+           </div>
+           <p class="text-xs text-slate-400 mt-6 text-center font-mono">
+               * SYSTEM: 輪盤項目基於上方篩選結果自動同步。
+           </p>
+       </div>
+
+
+
+
+       <!-- 結果顯示區塊 -->
+       <div class="mt-10">
+           <div class="flex justify-between items-end mb-4 border-b border-slate-200 pb-2">
+               <h2 class="text-xl font-bold text-slate-800 flex items-center">
+                   <i data-lucide="list" class="w-5 h-5 mr-2 text-slate-400"></i> 搜尋結果
+               </h2>
+               <!-- 新增資料計數顯示 -->
+               <span class="text-sm text-slate-500 font-mono">
+                   Count: <span id="result-count" class="font-bold text-blue-600">0</span> / <span id="total-count">0</span>
+               </span>
+           </div>
+          
+           <div id="results-container" class="space-y-4">
+               <!-- 餐廳結果將顯示在這裡 -->
+           </div>
+       </div>
+
+
+   </div>
+
+
+   <script type="module">
+       import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+       import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+       import { getFirestore, doc, setDoc, getDoc, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+       import { setLogLevel } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+
+
+       // --- 初始餐廳資料 (僅用於首次載入或重置) ---
+       // 總計 31 間餐廳
+       const REAL_RESTAURANTS_INITIAL = [
+           // ID 1-7
+           { id: 1, name: "青島東路基隆麵食館", distance: 5, price: "$", weekdayOpen: true, timeStart: "11:00", timeEnd: "20:00", address: "台北市中正區青島東路7-3號" },
+           { id: 2, name: "珍品小館", distance: 10, price: "$", weekdayOpen: true, timeStart: "11:00", timeEnd: "14:00", address: "台北市中正區青島東路7-5號" },
+           { id: 3, name: "皇家黃牛肉麵", distance: 15, price: "$$", weekdayOpen: true, timeStart: "11:00", timeEnd: "20:00", address: "台北市中正區青島東路9號" },
+           { id: 4, name: "忠青商行", distance: 20, price: "$$", weekdayOpen: true, timeStart: "11:00", timeEnd: "21:00", address: "台北市中正區青島東路6-1號" },
+           { id: 5, name: "雙月食品社 (青島店)", distance: 25, price: "$$", weekdayOpen: true, timeStart: "11:00", timeEnd: "14:00", address: "台北市中正區青島東路6-2號" },
+           { id: 6, name: "93番茄牛肉麵", distance: 60, price: "$", weekdayOpen: true, timeStart: "11:30", timeEnd: "14:00", address: "台北市中正區青島東路3-2號" },
+           { id: 7, name: "青島排骨便當", distance: 65, price: "$", weekdayOpen: true, timeStart: "11:00", timeEnd: "14:00", address: "台北市中正區青島東路3-3號" },
+           // ID 8
+           { id: 8, name: "皕福市集 (美食街)", distance: 400, price: "$$", weekdayOpen: true, timeStart: "10:00", timeEnd: "20:30", address: "台北市中正區杭州南路一段27號B1" },
+           // ID 9-15
+           { id: 9, name: "貳加貳早午餐", distance: 120, price: "$", weekdayOpen: true, timeStart: "07:30", timeEnd: "15:00", address: "台北市中正區紹興南街6號" },
+           { id: 10, name: "小法國餐館", distance: 150, price: "$$$", weekdayOpen: true, timeStart: "12:00", timeEnd: "14:30", address: "台北市中正區青島東路21-4號" },
+           { id: 11, name: "Kitchen 12 (十二廚)", distance: 250, price: "$$$", weekdayOpen: true, timeStart: "11:30", timeEnd: "14:00", address: "台北市中正區忠孝東路一段12號 (喜來登)" },
+           { id: 12, name: "巧之味手工水餃", distance: 350, price: "$", weekdayOpen: true, timeStart: "11:00", timeEnd: "21:00", address: "台北市中正區濟南路二段6號" },
+           { id: 13, name: "勺勺客陝西餐館", distance: 400, price: "$$", weekdayOpen: true, timeStart: "11:30", timeEnd: "14:30", address: "台北市中正區杭州南路一段27號" },
+           { id: 14, name: "挽肉と米 台北華山", distance: 600, price: "$$$", weekdayOpen: true, timeStart: "11:00", timeEnd: "15:00", address: "台北市中正區忠孝東路二段27號" },
+           { id: 15, name: "爭鮮迴轉壽司 (中山店)", distance: 850, price: "$$", weekdayOpen: true, timeStart: "11:00", timeEnd: "21:30", address: "台北市中正區中山北路一段33號" },
+          
+           // ID 16-19, 21-23
+           { id: 16, name: "麥當勞 (善導寺店)", distance: 250, price: "$", weekdayOpen: true, timeStart: "07:00", timeEnd: "22:00", address: "台北市中正區忠孝東路一段80號" },
+           { id: 17, name: "溫州大餛鈍 (紹興店)", distance: 450, price: "$", weekdayOpen: true, timeStart: "11:00", timeEnd: "20:00", address: "台北市中正區紹興南街3號" },
+           { id: 18, name: "台北李家肉羹", distance: 100, price: "$", weekdayOpen: true, timeStart: "11:00", timeEnd: "14:00", address: "台北市中正區青島東路23-2號" },
+           { id: 19, name: "蜜蜂咖啡 (簡餐)", distance: 60, price: "$$", weekdayOpen: true, timeStart: "11:30", timeEnd: "20:30", address: "台北市中正區青島東路3-2號" },
+           { id: 21, name: "合掌村 (華山市場)", distance: 300, price: "$$", weekdayOpen: true, timeStart: "11:00", timeEnd: "14:00", address: "台北市中正區忠孝東路一段108號 (華山市場)" },
+           { id: 22, name: "佳園排骨麵", distance: 500, price: "$", weekdayOpen: true, timeStart: "11:00", timeEnd: "14:30", address: "台北市中正區林森南路10號" },
+           { id: 23, name: "以馬內利鮮魚湯", distance: 380, price: "$", weekdayOpen: true, timeStart: "07:00", timeEnd: "14:00", address: "台北市中正區杭州南路一段3號" },
+          
+           // ID 24-31
+           { id: 24, name: "老張牛肉麵", distance: 700, price: "$$$", weekdayOpen: true, timeStart: "11:30", timeEnd: "20:00", address: "台北市中正區南陽街17號" },
+           { id: 25, name: "青島刀削麵", distance: 50, price: "$$", weekdayOpen: true, timeStart: "11:00", timeEnd: "14:30", address: "台北市中正區青島東路8號" },
+           { id: 26, name: "花壽司專賣 (華山)", distance: 300, price: "$$", weekdayOpen: true, timeStart: "10:30", timeEnd: "19:00", address: "台北市中正區忠孝東路一段108號 華山市場 B1" },
+           { id: 27, name: "義式廚房 (午間套餐)", distance: 900, price: "$$$", weekdayOpen: true, timeStart: "11:00", timeEnd: "14:00", address: "台北市中正區仁愛路一段17號" },
+           { id: 28, name: "Subway (善導寺捷運店)", distance: 200, price: "$", weekdayOpen: true, timeStart: "08:00", timeEnd: "21:00", address: "台北市中正區忠孝東路一段12號 捷運善導寺站B1" },
+           { id: 29, name: "八番赤野日式料理", distance: 350, price: "$$", weekdayOpen: true, timeStart: "11:00", timeEnd: "14:30", address: "台北市中正區紹興南街8號" },
+           { id: 30, name: "知足蔬食自助餐", distance: 450, price: "$", weekdayOpen: true, timeStart: "10:30", timeEnd: "14:00", address: "台北市中正區杭州南路一段9號" },
+           { id: 31, name: "路易莎咖啡 (紹興店)", distance: 300, price: "$$", weekdayOpen: true, timeStart: "07:30", timeEnd: "18:00", address: "台北市中正區紹興北街3號1樓" },
+       ];
+       // -----------------------------------------------------------------
+
+
+       // --- Firebase/Auth Setup ---
+       const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+       const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+       const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+
+       // Firebase Initialization
+       setLogLevel('Debug');
+       const app = initializeApp(firebaseConfig);
+       const db = getFirestore(app);
+       const auth = getAuth(app);
+       let currentUserId = 'anonymous';
+       let isAuthReady = false;
+       // 公共資料路徑：所有用戶共享同一份餐廳列表
+       const PUBLIC_COLLECTION_PATH = `artifacts/${appId}/public/data/lunch_options`;
+       const PUBLIC_DOC_ID = 'restaurant_list_v1';
+
+
+       let currentRestaurants = []; // 應用程式主要使用的餐廳資料
+
+
+       // 輪盤相關變數
+       let canvas, ctx;
+       let restaurantsForWheel = [];
+       let startAngle = 0;
+       let arc = 0;
+       let spinTimeout = null;
+       let spinTime = 0;
+       let spinTimeTotal = 0;
+       let finalAngle = 0;
+       let winningRestaurantIndex = -1;
+       let isSpinning = false;
+      
+       // 輪盤顏色：數據雲端風格 (Data Cloud Palette)
+       const COLORS = [
+           "#3b82f6", "#06b6d4", "#6366f1", "#14b8a6", "#8b5cf6", "#0ea5e9", "#64748b", "#2dd4bf"
+       ];
+      
+       let filters = {
+           price: "",   
+           distance: 500
+       };
+
+
+       const TARGET_DAY_MIN = 1;
+       const TARGET_DAY_MAX = 5;
+      
+       const LUNCH_WINDOW_START_MINUTES = 12 * 60;
+       const LUNCH_WINDOW_END_MINUTES = 13 * 60;  
+      
+       // --- 公用工具函式 ---
+       function updateDbStatus(message, isError = false) {
+           const statusEl = document.getElementById('db-status');
+           const color = isError ? 'text-red-600' : 'text-indigo-600';
+           statusEl.innerHTML = `<span class="font-bold">資料庫狀態:</span> <span class="${color} font-mono">${message}</span>`;
+           document.getElementById('save-btn').disabled = !isAuthReady;
+           document.getElementById('load-btn').disabled = !isAuthReady;
+       }
+
+
+       function getCurrentTimeStatus() {
+           const now = new Date();
+           const day = now.getDay();
+           const hour = now.getHours();
+           const minute = now.getMinutes();
+          
+           const currentMinutes = hour * 60 + minute;
+
+
+           const isWeekday = day >= TARGET_DAY_MIN && day <= TARGET_DAY_MAX;
+           const isLunchTimeWindow = isWeekday && currentMinutes >= LUNCH_WINDOW_START_MINUTES && currentMinutes < LUNCH_WINDOW_END_MINUTES;
+
+
+           return {
+               isLunchTimeWindow,
+               day,
+               hour,
+               minute,
+               timeString: `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
+           };
+       }
+      
+       function formatMinutesToTime(minutes) {
+           const hour = Math.floor(minutes / 60);
+           const min = minutes % 60;
+           return `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+       }
+      
+       /**
+        * 根據當前時間和日期，更新頁面頂部的狀態訊息。
+        */
+       function updateStatusMessage() {
+           const statusEl = document.getElementById('status-message');
+           const { isLunchTimeWindow, day, timeString } = getCurrentTimeStatus();
+          
+           const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
+           const lunchStart = formatMinutesToTime(LUNCH_WINDOW_START_MINUTES);
+           const lunchEnd = formatMinutesToTime(LUNCH_WINDOW_END_MINUTES);
+
+
+           let message = "";
+           let bgColor = "bg-slate-50";
+           let borderColor = "border-slate-300";
+           let textColor = "text-slate-700";
+
+
+           if (isLunchTimeWindow) {
+               // 午餐時間
+               bgColor = "bg-green-50";
+               borderColor = "border-green-400";
+               textColor = "text-green-700";
+               message = `<span class="font-bold">【現在是午餐決策時間！】</span> 現在時間是 ${timeString}，趕快來決定要吃什麼吧！`;
+           } else if (day >= TARGET_DAY_MIN && day <= TARGET_DAY_MAX) {
+               // 工作日，但不在午餐時間窗口
+               bgColor = "bg-yellow-50";
+               borderColor = "border-yellow-400";
+               textColor = "text-yellow-700";
+               message = `<span class="font-bold">今日工作日 (週${dayNames[day]})。</span> 現在時間是 ${timeString}，午餐決策時間在 ${lunchStart} ~ ${lunchEnd}。`;
+           } else {
+               // 週末
+               bgColor = "bg-indigo-50";
+               borderColor = "border-indigo-400";
+               textColor = "text-indigo-700";
+               message = `<span class="font-bold">今日是週末 (週${dayNames[day]})。</span> 現在時間是 ${timeString}，系統假設午餐時間在 ${lunchStart} ~ ${lunchEnd}。`;
+           }
+          
+           statusEl.className = `mb-6 p-4 rounded-lg text-sm transition-all duration-300 border-l-4 shadow-sm ${bgColor} ${borderColor} ${textColor}`;
+           statusEl.innerHTML = message;
+       }
+
+
+       function isRestaurantOpenForLunch(restaurant) {
+           if (!restaurant.weekdayOpen) return false;
+           const [startHour, startMin] = restaurant.timeStart.split(':').map(Number);
+           const [endHour, endMin] = restaurant.timeEnd.split(':').map(Number);
+           const startMinutes = startHour * 60 + startMin;
+           const endMinutes = endHour * 60 + endMin;
+           const currentTimeStatus = getCurrentTimeStatus();
+          
+           // 檢查是否是工作日
+           if (currentTimeStatus.day < TARGET_DAY_MIN || currentTimeStatus.day > TARGET_DAY_MAX) {
+               return false;
+           }
+          
+           // 檢查營業時間是否覆蓋午餐時間窗口
+           return startMinutes < LUNCH_WINDOW_END_MINUTES && endMinutes > LUNCH_WINDOW_START_MINUTES;
+       }
+
+
+       function easeOut(t, b, c, d) {
+           return c * ((-Math.cos(t/d * Math.PI) / 2) + 0.5) + b;
+       }
+      
+       function getPriceColor(price) {
+           switch (price) {
+               case "$":
+                   return "text-sky-600"; // Changed from emerald/green
+               case "$$":
+                   return "text-blue-600";
+               case "$$$":
+                   return "text-purple-600";
+               default:
+                   return "text-slate-600";
+           }
+       }
+      
+       function formatDistance(distance) {
+           if (distance >= 1000) {
+               return `${(distance / 1000).toFixed(1)}km`;
+           }
+           return `${distance}m`;
+       }
+      
+       // --- 核心操作函式 (需掛載到 window) ---
+      
+       // 從 Firestore 載入餐廳列表
+       async function loadRestaurantsFromFirestore() {
+            if (!isAuthReady) {
+               updateDbStatus("認證未完成，等待載入...");
+               return;
+           }
+          
+           updateDbStatus("載入中...");
+           try {
+               const docRef = doc(db, PUBLIC_COLLECTION_PATH, PUBLIC_DOC_ID);
+               const docSnap = await getDoc(docRef);
+
+
+               if (docSnap.exists()) {
+                   const data = docSnap.data();
+                   // 解析儲存的 JSON 字串
+                   currentRestaurants = JSON.parse(data.data);
+                  
+                   updateDbStatus(`載入成功 (${currentRestaurants.length} 筆資料, 更新於 ${new Date(data.updatedAt).toLocaleTimeString()})`);
+               } else {
+                   // 如果文件不存在，使用初始資料並提示用戶儲存
+                   currentRestaurants = REAL_RESTAURANTS_INITIAL;
+                   updateDbStatus(`雲端清單不存在，已使用 ${currentRestaurants.length} 筆初始資料。請儲存以建立雲端清單。`);
+               }
+
+
+               // 資料載入後，重新應用篩選器並繪製輪盤
+               findLunch();
+
+
+           } catch (e) {
+               console.error("載入失敗: ", e);
+               currentRestaurants = REAL_RESTAURANTS_INITIAL;
+               updateDbStatus(`載入失敗 (${e.message})，已使用 ${currentRestaurants.length} 筆初始資料。`, true);
+               findLunch();
+           }
+       }
+      
+       // 儲存餐廳列表到 Firestore
+       async function saveRestaurantsToFirestore() {
+           if (!isAuthReady) {
+               updateDbStatus("認證未完成，無法儲存。", true);
+               return;
+           }
+           if (currentRestaurants.length === 0) {
+                updateDbStatus("清單為空，無法儲存。", true);
+                return;
+           }
+          
+           updateDbStatus("儲存中...");
+           try {
+               const docRef = doc(db, PUBLIC_COLLECTION_PATH, PUBLIC_DOC_ID);
+               // 由於 Firestore 不支援直接儲存所有 JS 類型 (例如 Function)，我們將其包裝在一個物件中，並確保資料是 JSON 友好的。
+               await setDoc(docRef, {
+                   data: JSON.stringify(currentRestaurants),
+                   updatedAt: new Date().toISOString(),
+                   updaterId: currentUserId
+               });
+               updateDbStatus(`儲存成功 (${currentRestaurants.length} 筆資料)！`);
+           } catch (e) {
+               console.error("儲存失敗: ", e);
+               updateDbStatus(`儲存失敗: ${e.message}`, true);
+           }
+       }
+      
+       function selectFilter(type, value) {
+           filters[type] = value;
+           document.querySelectorAll(`[data-${type}]`).forEach(btn => {
+               btn.classList.remove('active', 'bg-blue-600', 'text-white', 'hover:bg-blue-700', 'border-blue-600');
+               // Reset to default style
+               btn.className = "filter-button bg-white text-slate-600 py-2 px-4 rounded hover:bg-slate-100 border border-slate-200 transition-all duration-200";
+              
+               if (btn.dataset[type] == value) {
+                   // Active style (Data Cloud Blue)
+                   btn.className = "filter-button active bg-blue-600 text-white py-2 px-4 rounded shadow-md border-blue-700 transition-all duration-200";
+               }
+           });
+           // 篩選器變動時，自動呼叫 findLunch() 來更新結果和輪盤
+           findLunch();
+       }
+
+
+       // 統一處理地圖開關
+       function toggleMap(id, encodedName, encodedAddress, customContainerId, customButtonId) {
+           const mapContainer = document.getElementById(customContainerId);
+           const mapButton = document.getElementById(customButtonId);
+
+
+           mapContainer.classList.toggle('hidden');
+
+
+           const isSpinResult = customContainerId === 'spin-map-container'; // 判斷是否為抽籤結果區塊
+          
+           if (!mapContainer.classList.contains('hidden')) {
+               // 地圖展開時
+               mapButton.innerHTML = `<span class="text-xs font-bold mr-1">${isSpinResult ? '隱藏地圖' : 'HIDE'}</span><i data-lucide="chevron-up" class="w-3 h-3"></i>`;
+               mapButton.classList.add('bg-slate-100', 'text-slate-600');
+               if (isSpinResult) mapButton.classList.remove('bg-blue-600', 'hover:bg-blue-700', 'text-white', 'border-blue-700'); // 抽籤結果按鈕樣式修正
+              
+               // 確保 iframe 只建立一次
+               if (mapContainer.children.length === 0) {
+                   const iframe = document.createElement('iframe');
+                   iframe.setAttribute('width', '100%');
+                   iframe.setAttribute('height', '100%');
+                   iframe.setAttribute('frameborder', '0');
+                   iframe.setAttribute('loading', 'lazy');
+                   iframe.setAttribute('allowfullscreen', '');
+                   iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+                  
+                   // *** 關鍵修正：使用餐廳名稱 + 街道號碼的地址作為查詢字串，以確保 Google Maps 能夠正確識別地點。 ***
+                   const query = `${decodeURIComponent(encodedName)}, ${decodeURIComponent(encodedAddress)}`;
+                   // 使用 ?q= 進行查詢，這能最大化 Google 成功定位到特定店家的機會
+                   const mapUrl = `https://maps.google.com/maps?q=${encodeURIComponent(query)}&z=16&t=m&output=embed`;
+                  
+                   iframe.setAttribute('src', mapUrl);
+                   mapContainer.appendChild(iframe);
+               }
+           } else {
+               // 地圖收合時
+               mapButton.classList.remove('bg-slate-100', 'text-slate-600');
+              
+               if (isSpinResult) {
+                   // 抽籤結果按鈕樣式
+                   mapButton.innerHTML = `<span class="mr-1">查看地圖</span><i data-lucide="map-pin" class="w-4 h-4"></i>`;
+                   mapButton.classList.add('bg-blue-600', 'text-white', 'hover:bg-blue-700', 'border-blue-700');
+                   mapButton.classList.remove('bg-white', 'border-blue-200', 'hover:bg-blue-50');
+               } else {
+                   // 一般結果卡片按鈕樣式
+                   mapButton.innerHTML = `<span class="text-xs font-bold mr-1">MAP</span><i data-lucide="map-pin" class="w-3 h-3 text-blue-600 group-hover:text-blue-700"></i>`;
+                   mapButton.classList.add('bg-white', 'text-blue-600', 'border-blue-200', 'hover:bg-blue-50');
+                   mapButton.classList.remove('bg-blue-600', 'text-white', 'hover:bg-blue-700');
+               }
+
+
+               lucide.createIcons();
+           }
+       }
+      
+       function spinWheel() {
+           if (isSpinning || restaurantsForWheel.length === 0) return;
+          
+           if (restaurantsForWheel.length === 1) {
+               // 如果只有一項，直接顯示結果
+               winningRestaurantIndex = 0;
+               stopRotateWheel();
+               return;
+           }
+
+
+           // 清除上次結果並顯示進行中
+           document.getElementById('spin-result').innerHTML = `
+               <p class="text-lg font-bold text-slate-500 uppercase tracking-wider">COMPUTING...</p>
+               <i data-lucide="loader" class="w-8 h-8 text-blue-500 mt-2 animate-spin"></i>
+           `;
+           lucide.createIcons();
+
+
+           document.getElementById('spin-btn').disabled = true;
+           isSpinning = true;
+
+
+           // 1. 隨機選出獲勝的 index
+           winningRestaurantIndex = Math.floor(Math.random() * restaurantsForWheel.length);
+           const items = restaurantsForWheel.length;
+           arc = 2 * Math.PI / items;
+          
+           // 2. 停止角度：設為 3 * Math.PI / 2 (Canvas 270 度，即頂部 12 點鐘方向)
+           const pointerAngle = 3 * Math.PI / 2;
+
+
+           // 3. 獲勝扇區的中心角度 (從 0 點開始算, 無繪圖偏移)
+           const winnerCenterAngle = winningRestaurantIndex * arc + arc / 2;
+          
+           // 4. 考慮繪圖偏移 (180度, Math.PI) 後，獲勝扇區的中心點 '實際' 繪製位置
+           const winnerCenterDrawAngle = winnerCenterAngle + Math.PI;
+          
+           // 5. 計算所需旋轉角度 (讓 Draw Angle 對齊 Pointer Angle)
+           let rotationNeeded = pointerAngle - winnerCenterDrawAngle;
+          
+           // 6. 正規化 rotationNeeded 到 0 到 2PI 之間
+           rotationNeeded = (rotationNeeded % (2 * Math.PI) + (2 * Math.PI)) % (2 * Math.PI);
+          
+           // 7. 總旋轉角度：多轉幾圈 + 對齊所需的角度 + 隨機偏移
+           const fullRotations = 5 * 2 * Math.PI;
+           const randomOffset = (Math.random() * arc / 3) - (arc / 6);
+           finalAngle = fullRotations + rotationNeeded + randomOffset;
+
+
+           spinTime = 0;
+           spinTimeTotal = 5000; // 5秒旋轉時間
+           rotateWheel();
+       }
+
+
+       // --- 輪盤內部函式 (無需掛載到 window) ---
+
+
+       function drawRouletteWheel(options) {
+           if (!canvas || !ctx) return;
+           // 根據螢幕寬度調整輪盤大小
+           const size = window.innerWidth <= 640 ? 250 : 300;
+           canvas.width = size;
+           canvas.height = size;
+
+
+           const outsideRadius = size / 2 - 5; // 靠近邊緣
+           const textRadius = size / 2 - 30; // 文本半徑
+           const insideRadius = size / 2 - 100; // 中心圓半徑
+          
+           ctx.clearRect(0, 0, size, size);
+          
+           if (options.length === 0) {
+               // 無資料時的顯示
+               ctx.fillStyle = "#94a3b8"; // Slate-400
+               ctx.font = 'bold 16px "Noto Sans TC", sans-serif';
+               ctx.textAlign = 'center';
+               ctx.fillText("無符合條件餐廳", size/2, size/2);
+              
+               // 即使無資料，也要畫指針
+               drawPointer(size, outsideRadius, ctx);
+               return;
+           }
+
+
+           arc = 2 * Math.PI / options.length;
+           ctx.strokeStyle = "#cbd5e1"; // Slate-300 border
+           ctx.lineWidth = 1;
+           ctx.font = 'bold 24px "Noto Sans TC", sans-serif';
+
+
+           // 180度旋轉偏移：讓整個輪盤圖案順時針旋轉 180 度 (π 弧度)
+           const rotationOffset = Math.PI;
+
+
+           options.forEach((restaurant, i) => {
+               // 將起始角度加上 180 度偏移
+               const angle = startAngle + i * arc + rotationOffset;
+               ctx.fillStyle = COLORS[i % COLORS.length];
+
+
+               // 繪製扇形
+               ctx.beginPath();
+               ctx.arc(size/2, size/2, outsideRadius, angle, angle + arc, false);
+               ctx.arc(size/2, size/2, insideRadius, angle + arc, angle, true);
+               ctx.stroke();
+               ctx.fill();
+
+
+               // 繪製文字 (第一個字)
+               ctx.save();
+               ctx.fillStyle = "#ffffff";
+               ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+               ctx.shadowBlur = 2;
+              
+               // 計算文字位置
+               const textX = size/2 + Math.cos(angle + arc / 2) * textRadius;
+               const textY = size/2 + Math.sin(angle + arc / 2) * textRadius;
+              
+               ctx.translate(textX, textY);
+               // 文字旋轉以適應扇形角度
+               ctx.rotate(angle + arc / 2 + Math.PI / 2);
+              
+               const text = restaurant.name.charAt(0);
+              
+               ctx.textAlign = 'center';
+               ctx.fillText(text, 0, 8);
+               ctx.restore();
+           });
+
+
+           // *** 繪製頂部指針 (黃色三角形) ***
+           drawPointer(size, outsideRadius, ctx);
+           // *** 頂部指針繪製結束 ***
+          
+           // 中心圓 (淺色風格)
+           ctx.beginPath();
+           ctx.arc(size/2, size/2, insideRadius, 0, 2 * Math.PI, false);
+           ctx.fillStyle = "#e2e8f0"; // Slate-200
+           ctx.fill();
+           ctx.lineWidth = 4;
+           ctx.strokeStyle = "#94a3b8"; // Slate-400
+           ctx.stroke();
+          
+           // 中心點
+           ctx.beginPath();
+           ctx.arc(size/2, size/2, 5, 0, 2 * Math.PI, false);
+           ctx.fillStyle = "#facc15";
+           ctx.fill();
+       }
+      
+       function drawPointer(size, outsideRadius, ctx) {
+            ctx.save();
+            ctx.fillStyle = "#facc15"; // 黃色
+            ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+            ctx.shadowBlur = 8;
+          
+            ctx.beginPath();
+            // 頂點 (尖端 - 略高於輪盤)
+            ctx.moveTo(size / 2, size / 2 - outsideRadius - 5);
+            // 右下角 (底線)
+            ctx.lineTo(size / 2 + 10, size / 2 - outsideRadius + 10);
+            // 左下角 (底線)
+            ctx.lineTo(size / 2 - 10, size / 2 - outsideRadius + 10);
+            ctx.closePath();
+            ctx.fill();
+          
+            ctx.restore();
+       }
+
+
+       function rotateWheel() {
+           spinTime += 30;
+           if (spinTime >= spinTimeTotal) {
+               stopRotateWheel();
+               return;
+           }
+           const spinAngle = easeOut(spinTime, 0, finalAngle, spinTimeTotal);
+           startAngle = spinAngle;
+           drawRouletteWheel(restaurantsForWheel);
+           spinTimeout = requestAnimationFrame(rotateWheel);
+       }
+
+
+       function stopRotateWheel() {
+           cancelAnimationFrame(spinTimeout);
+          
+           if (winningRestaurantIndex < 0 || winningRestaurantIndex >= restaurantsForWheel.length) {
+               // 如果索引無效，則重置並返回
+               initializeRoulette();
+               document.getElementById('spin-btn').disabled = false;
+               isSpinning = false;
+               return;
+           }
+          
+           const winner = restaurantsForWheel[winningRestaurantIndex];
+          
+           const resultEl = document.getElementById('spin-result');
+           const mapContainerId = 'spin-map-container';
+           const mapButtonId = 'spin-map-btn';
+
+
+           const encodedName = encodeURIComponent(winner.name);
+           const encodedAddress = encodeURIComponent(winner.address);
+          
+           // 顯示結果 (新增地圖按鈕和容器)
+           resultEl.innerHTML = `
+               <p class="text-lg font-bold text-slate-500 uppercase tracking-wider">Decision Made</p>
+               <p class="text-3xl sm:text-4xl font-extrabold text-blue-600 animate-pulse mt-1">
+                   ${winner.name}
+               </p>
+               <p class="text-sm text-slate-500 mt-1">${winner.address}</p>
+
+
+               <!-- 新增地圖按鈕 - 傳遞餐廳名稱和地址 -->
+               <button id="${mapButtonId}"
+                   onclick="toggleMap(${winner.id}, '${encodedName}', '${encodedAddress}', '${mapContainerId}', '${mapButtonId}')"
+                   class="flex items-center justify-center text-white bg-blue-600 border border-blue-700 hover:bg-blue-700 py-2 px-5 rounded-lg transition duration-150 mt-4 group shadow-md text-sm font-bold">
+                   <span class="mr-1">查看地圖</span>
+                   <i data-lucide="map-pin" class="w-4 h-4"></i>
+               </button>
+               <div id="${mapContainerId}" class="map-container hidden h-[200px]"></div>
+           `;
+
+
+           lucide.createIcons();
+
+
+           document.getElementById('spin-btn').disabled = false;
+           isSpinning = false;
+       }
+      
+       function initializeRoulette() {
+            document.getElementById('spin-result').innerHTML = `
+               <p class="text-lg font-bold text-slate-400 uppercase tracking-wider">Ready for Execution</p>
+               <p class="text-3xl sm:text-4xl font-extrabold text-slate-600 mt-1">---</p>
+               <p class="text-sm text-slate-500 mt-1">請選擇篩選條件</p>
+           `;
+       }
+
+
+       function findLunch() {
+           const resultsContainer = document.getElementById('results-container');
+           resultsContainer.innerHTML = '';
+
+
+           // 檢查 currentRestaurants 是否已載入
+           if (currentRestaurants.length === 0) {
+                resultsContainer.innerHTML = `
+                   <div class="p-6 bg-white border border-red-200 text-red-600 rounded-lg text-center font-bold shadow-sm">
+                       <i data-lucide="alert-circle" class="w-6 h-6 mx-auto mb-2"></i>
+                       餐廳清單為空。<br>
+                       <span class="text-sm text-red-400 font-normal">(請點擊「載入清單」或新增項目並儲存)</span>
+                   </div>
+               `;
+               document.getElementById('result-count').textContent = 0;
+               document.getElementById('total-count').textContent = 0;
+               drawRouletteWheel([]);
+               document.getElementById('spin-btn').disabled = true;
+               return;
+           }
+
+
+           // 1. 先算出符合平日/午餐時間的「有效餐廳總數」
+           const validLunchRestaurants = currentRestaurants.filter(r => isRestaurantOpenForLunch(r));
+          
+           // 2. 再根據使用者設定 (價格/距離) 進行篩選
+           const filteredRestaurants = validLunchRestaurants.filter(restaurant => {
+               const priceMatch = filters.price === "" || restaurant.price === filters.price;
+               const distanceMatch = restaurant.distance <= filters.distance;
+               return priceMatch && distanceMatch;
+           });
+          
+           // --- 更新輪盤 ---
+           restaurantsForWheel = filteredRestaurants;
+           const spinButton = document.getElementById('spin-btn');
+          
+           if (restaurantsForWheel.length === 0) {
+               spinButton.disabled = true;
+                document.getElementById('spin-result').innerHTML = `
+                   <p class="text-lg font-bold text-red-400 uppercase tracking-wider">ERROR</p>
+                   <p class="text-2xl font-extrabold text-red-500 mt-1">NO DATA AVAILABLE</p>
+                   <p class="text-sm text-red-500 mt-1">請調整篩選條件。</p>
+               `;
+           } else if (restaurantsForWheel.length === 1) {
+               // 如果只剩一個，禁止旋轉並顯示結果
+               spinButton.disabled = true;
+               winningRestaurantIndex = 0;
+               stopRotateWheel();
+           } else {
+               spinButton.disabled = false;
+               initializeRoulette(); // 重置為 ready 狀態
+           }
+           drawRouletteWheel(restaurantsForWheel);
+
+
+
+
+           // 更新結果數量與總數提示
+           document.getElementById('result-count').textContent = filteredRestaurants.length;
+           document.getElementById('total-count').textContent = validLunchRestaurants.length;
+
+
+           if (filteredRestaurants.length === 0) {
+               resultsContainer.innerHTML = `
+                   <div class="p-6 bg-white border border-red-200 text-red-600 rounded-lg text-center font-bold shadow-sm">
+                       <i data-lucide="alert-circle" class="w-6 h-6 mx-auto mb-2"></i>
+                       無符合條件結果。<br>
+                       <span class="text-sm text-red-400 font-normal">(總計有效餐廳數: ${validLunchRestaurants.length})</span>
+                   </div>
+               `;
+           } else {
+               // 顯示結果
+               filteredRestaurants.forEach(restaurant => {
+                   const card = document.createElement('div');
+                   card.className = "bg-white p-4 border border-slate-200 rounded-lg shadow-sm transition duration-200 hover:shadow-md hover:border-blue-300";
+                  
+                   const openTime = `${restaurant.timeStart.substring(0, 5)} - ${restaurant.timeEnd.substring(0, 5)}`;
+                   // 保持 Open Status 為藍色，避免使用綠色
+                   const openStatus = `<span class="text-xs font-semibold text-blue-700 bg-blue-50 py-1 px-2 rounded border border-blue-100">OPEN 12-13</span>`;
+
+
+                   const mapButtonId = `map-btn-${restaurant.id}`;
+                   const mapContainerId = `map-container-${restaurant.id}`;
+                  
+                   // 準備地圖所需的編碼名稱和地址
+                   const encodedName = encodeURIComponent(restaurant.name);
+                   const encodedAddress = encodeURIComponent(restaurant.address);
+                  
+                   card.innerHTML = `
+                       <div class="flex justify-between items-start">
+                           <div class="flex-1">
+                               <div class="flex items-center">
+                                   <!-- 顯示單字圖示 (模擬 Logo) -->
+                                   <div class="w-8 h-8 rounded bg-slate-100 text-slate-600 font-bold flex items-center justify-center mr-3 text-sm">
+                                       ${restaurant.name.charAt(0)}
+                                   </div>
+                                   <p class="text-lg font-bold text-slate-800">${restaurant.name}</p>
+                               </div>
+                               <p class="text-sm text-slate-500 mt-1 ml-11">${restaurant.address}</p>
+                               <p class="text-xs text-slate-400 mt-2 ml-11 flex items-center space-x-2">
+                                   <span>${openTime}</span>
+                                   ${openStatus}
+                               </p>
+                           </div>
+                           <div class="flex flex-col items-end space-y-2 ml-4">
+                               <div class="flex items-center space-x-2">
+                                   <span class="text-md font-bold ${getPriceColor(restaurant.price)}">${restaurant.price}</span>
+                                   <span class="text-xs font-mono text-slate-500 bg-slate-100 py-1 px-2 rounded">
+                                       ${formatDistance(restaurant.distance)}
+                                   </span>
+                               </div>
+                               <button id="${mapButtonId}"
+                                   onclick="toggleMap(${restaurant.id}, '${encodedName}', '${encodedAddress}', '${mapContainerId}', '${mapButtonId}')"
+                                   class="flex items-center justify-center text-blue-600 bg-white border border-blue-200 hover:bg-blue-50 py-1.5 px-3 rounded-md transition duration-150 group shadow-sm">
+                                   <span class="text-xs font-bold mr-1">MAP</span>
+                                   <i data-lucide="map-pin" class="w-3 h-3 text-blue-600 group-hover:text-blue-700"></i>
+                               </button>
+                           </div>
+                       </div>
+                       <div id="${mapContainerId}" class="map-container hidden h-[250px]"></div>
+                   `;
+                   resultsContainer.appendChild(card);
+               });
+               lucide.createIcons();
+           }
+       }
+      
+       // --- 將函式暴露給全域 Window (解決 ReferenceError) ---
+       window.loadRestaurantsFromFirestore = loadRestaurantsFromFirestore;
+       window.saveRestaurantsToFirestore = saveRestaurantsToFirestore;
+       window.selectFilter = selectFilter;
+       window.toggleMap = toggleMap;
+       window.spinWheel = spinWheel;
+       // --- 函式暴露結束 ---
+      
+
+
+       // --- 應用程式初始化 ---
+       document.addEventListener('DOMContentLoaded', () => {
+            // 1. 初始化 Canvas
+           canvas = document.getElementById('roulette-canvas');
+           if (canvas) {
+               ctx = canvas.getContext('2d');
+           }
+          
+           // 2. Auth/DB Setup (非同步)
+          
+           // Auth Listener and Data Loading
+           onAuthStateChanged(auth, async (user) => {
+               if (user) {
+                   currentUserId = user.uid;
+               } else {
+                   currentUserId = crypto.randomUUID();
+               }
+               isAuthReady = true;
+               updateDbStatus("認證完成，準備載入清單。");
+
+
+               // 認證完成後，嘗試從雲端載入資料
+               await loadRestaurantsFromFirestore();
+              
+               // 載入完成後，執行初始篩選和繪製
+               selectFilter('distance', filters.distance);
+               selectFilter('price', filters.price);
+           });
+
+
+           // Sign in logic
+           if (initialAuthToken) {
+               signInWithCustomToken(auth, initialAuthToken).catch(e => {
+                   console.error("Custom token sign-in failed. Falling back to anonymous.", e);
+                   signInAnonymously(auth).catch(e => console.error("Anonymous sign-in failed.", e));
+               });
+           } else {
+               signInAnonymously(auth).catch(e => console.error("Anonymous sign-in failed.", e));
+           }
+          
+           // 3. 狀態更新
+           updateStatusMessage();
+           // 每分鐘更新一次狀態
+           setInterval(updateStatusMessage, 60000);
+
+
+           // 4. 建立所有 Lucide icons
+           lucide.createIcons();
+       });
+      
+   </script>
+</body>
+</html>
+
